@@ -1,6 +1,10 @@
 package rungine
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+	"strings"
+)
 
 // Facts definition.
 type Facts map[string]interface{}
@@ -8,14 +12,8 @@ type Facts map[string]interface{}
 // Results definition.
 type Results map[string]interface{}
 
-// EvalResult defines the results of the evaluation.
-type EvalResult struct {
-	Definition string
-	Success    bool
-}
-
 // EvalFunc definition.
-type EvalFunc func(facts Facts) EvalResult
+type EvalFunc func(facts Facts) (bool, string, error)
 
 // Rule definition.
 type Rule struct {
@@ -54,17 +52,39 @@ func (n *Node) AppendResultRule(eval EvalFunc, res Results) error {
 }
 
 // Eval returns the result of the evaluation of the decision tree.
-func (n *Node) Eval(facts Facts, audit []string) (Results, []string) {
+func (n *Node) Eval(facts Facts, audit []string) (Results, []string, error) {
+	if audit == nil {
+		audit = make([]string, 0)
+	}
 	for _, r := range n.rules {
-		re := r.Eval(facts)
-		if !re.Success {
+		success, expr, err := r.Eval(facts)
+		if err != nil {
+			return nil, nil, err
+		}
+		if !success {
 			continue
 		}
-		audit = append(audit, re.Definition)
+		audit = append(audit, expr)
 		if r.Next != nil {
 			return r.Next.Eval(facts, audit)
 		}
-		return r.Res, audit
+		audit = append(audit, resultToString(r.Res))
+		return r.Res, audit, nil
 	}
-	return nil, audit
+	return nil, nil, nil
+}
+
+func resultToString(res Results) string {
+	sb := strings.Builder{}
+	count := 0
+	for k, v := range res {
+		if count > 0 {
+			sb.WriteRune(',')
+		}
+		sb.WriteString(k)
+		sb.WriteRune(':')
+		sb.WriteString(fmt.Sprint(v))
+		count++
+	}
+	return sb.String()
 }
